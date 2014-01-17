@@ -4,7 +4,7 @@ import controlP5.*;
 import org.philhosoft.p8g.svg.P8gGraphicsSVG;
 import processing.core.PApplet;
 import toxi.geom.Vec2D;
-import toxi.physics2d.VerletParticle2D;
+import toxi.physics2d.VerletSpring2D;
 import toxi.processing.ToxiclibsSupport;
 import util.Color;
 import util.XGen;
@@ -22,23 +22,27 @@ import java.util.HashMap;
 public class App extends PApplet {
 public static PApplet P5;
 public static final DecimalFormat DF3 = new DecimalFormat("#.###");
-public static boolean RECORDING = false, UPDATE_PHYSICS = true, UPDATE_PHYSVAL = true, SHOW_PARTICLES = true;
 public static final String xmlFilePath = "F:\\Java\\Projects\\thesis_2014\\version_1.4.0\\data\\flowgraph_test_sm.xml";
-public static boolean SHOW_MINDIST, SHOW_ATTRACTORS, SHOW_VOR_VERTS, SHOW_VOR_INFO, SHOW_VOIDS, UPDATE_VORONOI, SHOW_VORONOI, SHOW_TAGS, SHOW_SPRINGS = true, SHOW_NODES = true, SHOW_INFO = true;
-public static float ZOOM = 1, SCALE = 10, DRAG = 0.3f, SPR_SCALE = 1f, SPR_STR = 0.01f, ATTR_RAD = 60, ATTR_STR = -0.9f, NODE_STR = -.5f, NODE_SCALE = 1, NODE_PAD = 0, OBJ_SIZE = 1, OBJ_COLOR = 1, VOR_REFRESH = 1, MIN = 0.1f;
+public static boolean RECORDING = false, UPDATE_PHYSICS = true, UPDATE_PHYSVAL = true, SHOW_PARTICLES = true;
+public static boolean SHOW_MINDIST, SHOW_ATTRACTORS, SHOW_TAGS, SHOW_SPRINGS = true, SHOW_NODES = true, SHOW_INFO = true;
+public static boolean SHOW_VOR_VERTS, SHOW_VOR_INFO, SHOW_VOIDS, UPDATE_VORONOI, SHOW_VORONOI;
+public static float ZOOM = 10, SCALE = 10, DRAG = 0.3f,
+		SPR_SCALE = 1f, SPR_STR = 0.01f, ATTR_RAD = 60, ATTR_STR = -0.9f, NODE_STR = -.5f, NODE_SCALE = 1, NODE_PAD = 0,
+		OBJ_SIZE = 1, OBJ_COLOR = 1, VOR_REFRESH = 1;
 public static String OBJ_NAME = "new", DRAWMODE = "bezier";
-private static ControlP5 CP5;
-private ToxiclibsSupport GFX;
-public PSys PSYS;
-//public static VSys VSYS;
-public static FSys FSYS;
+public static boolean isShiftDown;
 static Println console;
 static Textarea myTextarea;
-public static boolean isShiftDown;
-//	private int drawMode;
+private ControlP5 CP5;
+public PSys PSYS;
+public FSys FSYS;
+private ToxiclibsSupport GFX;
 private ArrayList<FSys.Node> nodes = new ArrayList<>();
 private ArrayList<FSys.Relation> relations = new ArrayList<>();
 private HashMap<FSys.Node, String> map = new HashMap<>();
+
+//public static VSys VSYS;
+//	private int drawMode;
 
 public static void main(String[] args) { PApplet.main(new String[]{("main.App")}); }
 public static void __rebelReload() {
@@ -71,18 +75,17 @@ private void initFlowgraph() {
 		JAXBContext context = JAXBContext.newInstance(FSys.class);
 		FSYS = (FSys) context.createUnmarshaller().unmarshal(createInput(xmlFilePath));
 	} catch (JAXBException e) { println("error parsing xml: "); e.printStackTrace(); System.exit(1); }
-	PSYS.clear();
 	FSYS.build();
+	initPhysics();
+}
+private void initPhysics() {
+	PSYS.clear();
 	for (FSys.Node c : FSys.nodes) {
-		PSYS.addParticle(c.getPos(), c.getBehavior().getRadius());
-		//VSYS.addCell(c.getVerlet());VSYS.addSite(c.getVerlet(), c.getColor());
+		PSYS.addParticle(c.getPos(), c.behavior.getRadius());
 	} for (FSys.Relation r : FSys.relations) {
 		FSys.Node na = FSYS.getNodeIndex().get(r.from);
 		FSys.Node nb = FSYS.getNodeIndex().get(r.to);
-		VerletParticle2D va = na.verlet;
-		VerletParticle2D vb = nb.verlet;
-		float l = na.getRadius() + nb.getRadius();
-//			PSYS.getPhysics().addSpring(new VerletSpring2D(va, vb, l, 0.01f));
+		PSYS.getPhysics().addSpring(new VerletSpring2D(na.verlet, nb.verlet, na.radius + nb.radius, 0.01f));
 		PSYS.createSpring(na, nb);
 	}
 }
@@ -92,7 +95,6 @@ private void setupCP5() {
 	CP5.setAutoSpacing(4, 8);
 	CP5.setColorBackground(Color.CP5_BG).setColorForeground(Color.CP5_FG).setColorActive(Color.CP5_ACT);
 	CP5.setColorCaptionLabel(Color.CP5_CAP).setColorValueLabel(Color.CP5_VAL);
-	//FrameRate FPS = CP5.addFrameRate();	FPS.setInterval(3).setPosition(20, HEIGHT - 20).draw();
 	CP5.begin(220, 0);
 	CP5.addButton("quit").linebreak();
 	CP5.addButton("load_xml").linebreak();
@@ -125,6 +127,7 @@ private void setupCP5() {
 	CP5.end();
 	CP5.begin(10, 10);
 	CP5.addSlider("SCALE").setRange(1, 20).setNumberOfTickMarks(20).linebreak();
+	CP5.addSlider("ZOOM").setRange(1, 20).setNumberOfTickMarks(20).linebreak();
 	CP5.addSlider("DRAG").setRange(0.1f, 1).linebreak();
 	CP5.addSlider("NODE_SCALE").setRange(0.1f, 2).setNumberOfTickMarks(20).linebreak();
 	CP5.addSlider("NODE_STR").setRange(-2, 2).linebreak();
@@ -133,7 +136,7 @@ private void setupCP5() {
 	CP5.addSlider("SPR_STR").setRange(0.01f, 0.03f).linebreak();
 	CP5.addSlider("ATTR_STR").setRange(-2f, 2).linebreak();
 	CP5.addSlider("ATTR_RAD").setRange(0.1f, 400).linebreak();
-	CP5.addSlider("VOR_REFRESH").setRange(1, 9).setNumberOfTickMarks(9).linebreak();
+//	CP5.addSlider("VOR_REFRESH").setRange(1, 9).setNumberOfTickMarks(9).linebreak();
 	CP5.end();
 	CP5.begin(10, 10);
 	CP5.addNumberbox("ITER_A").setPosition(10, 14).linebreak();
@@ -195,15 +198,15 @@ private void styleControllers() {
 
 public void draw() {
 	background(Color.BG);
+	PSYS.update();
+	FSYS.update(this);
+	if (RECORDING) { RECORDING = false; endRecord(); System.out.println("SVG EXPORTED SUCCESSFULLY"); }
 	pushMatrix();
 	translate(-((ZOOM * width) - width) / 2, -((ZOOM * height) - height) / 2);
 	scale(ZOOM);
-	popMatrix();
-	PSYS.update();
-	FSYS.update(this);
-	drawGUI();
-	if (RECORDING) { RECORDING = false; endRecord(); System.out.println("SVG EXPORTED SUCCESSFULLY"); }
 	drawShapes2D();
+	popMatrix();
+	drawGUI();
 }
 private void drawGUI() {
 	fill(Color.BG_MENUS);
@@ -237,16 +240,17 @@ public void addRelation(FSys.Node na, FSys.Node nb) {
 	map.put(na, na.name);
 }
 private void createNode(String name, Vec2D pos, float size, int color, int id) {
-	FSys.Node newNode = new FSys.Node();
-	newNode.setId(id);
-	newNode.setName(name);
-	newNode.setSize(size);
-	newNode.setPos(pos);
-	newNode.setColor(color);
-	newNode.getVerlet().setWeight(size);
-	PSYS.getPhysics().addParticle(newNode.getVerlet());
-	PSYS.getPhysics().addBehavior(newNode.getBehavior());
-	nodes.add(newNode);
+	FSys.Node n = new FSys.Node();
+	n.setId(id);
+	n.setName(name);
+	n.setSize(size);
+	n.setPos(pos);
+	n.setColor(color);
+	n.verlet.setWeight(size);
+	PSYS.getPhysics().addParticle(n.verlet);
+	PSYS.getPhysics().addBehavior(n.behavior);
+	n.setPos(pos);
+	nodes.add(n);
 	marshal();
 }
 private void marshal() {
@@ -276,7 +280,7 @@ public void keyPressed() {
 	if (key == CODED && keyCode == SHIFT) { isShiftDown = true; }
 	switch (key) {
 		case 'a':
-			createNode(App.OBJ_NAME, new Vec2D(mouseX, mouseY), App.OBJ_SIZE, (int) App.OBJ_COLOR, 10);
+			createNode(App.OBJ_NAME, new Vec2D(mouseX, mouseY), App.OBJ_SIZE, (int) App.OBJ_COLOR, nodes.size());
 			break;
 		case 'p':
 			marshal();
